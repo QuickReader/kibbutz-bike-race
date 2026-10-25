@@ -46,6 +46,7 @@ function begin() {
   $('menu').hidden = $('results').hidden = true; $('hud').hidden = false;
   state = 'countdown'; count = 3; shownPlace = 0; lastFall = 0;
 }
+if (matchMedia('(pointer: fine)').matches) $('start').textContent = 'Click or press Enter to start';
 $('menu').addEventListener('click', begin);
 $('again').addEventListener('click', begin);
 
