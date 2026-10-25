@@ -16,3 +16,7 @@
 - 2026-10-25 — Licence: all rights reserved (QuickReader). Privacy line in README only. — user
 - 2026-10-25 — No CSP in v1 (no external requests; breakage risk > gain). — Leader (on security rec)
 - 2026-10-25 — Published: public repo QuickReader/kibbutz-bike-race, GitHub Pages from main → https://quickreader.github.io/kibbutz-bike-race/ — user
+- 2026-10-25 — Redesign v2: look only (gameplay, track, controls, AI unchanged). Reason: "graphics too low res, figures don't look human". — user
+- 2026-10-25 — v2 style: bold cartoon (outlined shapes, strong colours). Replaces blocky/pixelated style. — user
+- 2026-10-25 — v2 platform: phone + desktop, both tested; keep screen-half steering on phone, no sound. — user
+- 2026-10-25 — v2 ships on a branch; replaces the live page only after user approval. — user
