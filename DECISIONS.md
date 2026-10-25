@@ -20,3 +20,4 @@
 - 2026-10-25 — v2 style: bold cartoon (outlined shapes, strong colours). Replaces blocky/pixelated style. — user
 - 2026-10-25 — v2 platform: phone + desktop, both tested; keep screen-half steering on phone, no sound. — user
 - 2026-10-25 — v2 ships on a branch; replaces the live page only after user approval. — user
+- 2026-10-25 — v2 look approved from preview (DESIGN.md v2, preview.html). Menu camera = front-facing rider shot. Font = system rounded stack, no download. — user

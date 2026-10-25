@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kibbutz Bike Race - v2 look preview</title>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
+<style>
+:root { --cream:#FFF6E0; --ink:#2A2233; --accent:#FF8A1F; --sun:#FFD23F; --oops:#E5372A; --blue:#2D6CDF; --purple:#8B4FD0; --teal:#12A594;
+  --pad: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  font: 900 clamp(14px,3.2vh,22px)/1.2 "Arial Rounded MT Bold", ui-rounded, "SF Pro Rounded", "Trebuchet MS", system-ui, sans-serif; color: var(--ink); }
+* { box-sizing:border-box; margin:0; }
+html,body { height:100%; overflow:hidden; background:#CDEBFA; }
+#game { position:fixed; inset:0; width:100%; height:100%; display:block; }
+#hud { position:fixed; inset:0; padding:var(--pad); display:flex; justify-content:space-between; align-items:flex-start; pointer-events:none; }
+/* sticker look: thick ink border, hard offset shadow, slight tilt */
+.pill { background:var(--cream); border:.55vh solid var(--ink); border-radius:2vh; box-shadow:0 .7vh 0 var(--ink); padding:0 1.6vh; }
+#pos { display:flex; align-items:baseline; gap:.3em; background:var(--sun); transform:rotate(-3deg); padding:.4vh 2vh .2vh; }
+#pos b { font-size:10vh; line-height:1; letter-spacing:-.02em; }
+#pos span { font-size:4.6vh; }
+#pos small { font-size:3vh; }
+#timer { font-size:5.4vh; font-variant-numeric:tabular-nums; margin-top:1vh; padding:.4vh 2.4vh; }
+#bar { position:relative; width:26vw; height:5.2vh; margin-top:1.6vh; padding:0; background:#fff; overflow:visible; }
+#bar .fill { position:absolute; left:.6vh; top:.6vh; bottom:.6vh; width:46%; border-radius:1.2vh; background:repeating-linear-gradient(-45deg,var(--accent) 0 1.2vh,#FFB357 0 2.4vh); border:.3vh solid var(--ink); }
+#bar i { position:absolute; top:50%; width:3.8vh; height:3.8vh; margin:-1.9vh 0 0 -1.9vh; border-radius:50%; border:.45vh solid var(--ink); box-shadow:0 .3vh 0 var(--ink); }
+#bar .flag { position:absolute; right:-1.4vh; top:-2.6vh; width:2vh; height:9vh; border:.45vh solid var(--ink); border-radius:.6vh;
+  background:repeating-conic-gradient(var(--ink) 0 25%,#fff 0 50%) 0 0/1.4vh 1.4vh; transform:rotate(6deg); }
+#d0 { left:46%; background:var(--oops); box-shadow:inset 0 -1.2vh var(--sun), 0 .3vh 0 var(--ink); z-index:2; width:4.6vh; height:4.6vh; margin:-2.3vh 0 0 -2.3vh; }
+#d1 { left:60%; background:var(--blue); } #d2 { left:38%; background:var(--purple); } #d3 { left:24%; background:var(--teal); }
+.right { display:flex; flex-direction:column; align-items:flex-end; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud">
+  <div id="pos" class="pill"><b>2</b><span>/4</span></div>
+  <div class="pill" id="timer">0:42.3</div>
+  <div class="right"><div class="pill" id="bar"><div class="fill"></div><i id="d3"></i><i id="d2"></i><i id="d1"></i><i id="d0"></i><span class="flag"></span></div></div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+
+/* ---------- look kit: toon material + inverted-hull outline ---------- */
+const INK = new THREE.Color(0x2A2233), FOG = new THREE.Color(0xCDEBFA), FOG_NEAR = 45, FOG_FAR = 150;
+const grad = new THREE.DataTexture(new Uint8Array([95, 160, 220, 255]), 4, 1, THREE.RedFormat);
+grad.minFilter = grad.magFilter = THREE.NearestFilter; grad.needsUpdate = true;
+const toonCache = new Map();
+const toon = c => { let m = toonCache.get(c); if (!m) toonCache.set(c, m = new THREE.MeshToonMaterial({ color: c, gradientMap: grad })); return m; };
+
+const outlineMat = k => new THREE.ShaderMaterial({
+  side: THREE.BackSide,
+  uniforms: { uInk: { value: INK }, uFog: { value: FOG }, uK: { value: k } },
+  vertexShader: `attribute vec3 onormal; uniform vec2 uK; varying float vF;
+    void main(){ vec4 mv = modelViewMatrix * vec4(position,1.0); float d = -mv.z;
+      mv.xyz += normalize(normalMatrix * onormal) * (uK.x + uK.y * d);
+      vF = smoothstep(${FOG_NEAR.toFixed(1)}, ${FOG_FAR.toFixed(1)}, d); gl_Position = projectionMatrix * mv; }`,
+  fragmentShader: `uniform vec3 uInk; uniform vec3 uFog; varying float vF;
+    void main(){ gl_FragColor = vec4(mix(uInk, uFog, vF), 1.0); }`
+});
+const OUT = outlineMat(new THREE.Vector2(0.012, 0.0035)), OUT_THIN = outlineMat(new THREE.Vector2(0.006, 0.002));
+
+// averaged normals per position so box corners do not split the hull open
+function smooth(geo) {
+  const p = geo.attributes.position, n = geo.attributes.normal, sum = new Map(), key = i => `${p.getX(i).toFixed(3)},${p.getY(i).toFixed(3)},${p.getZ(i).toFixed(3)}`;
+  for (let i = 0; i < p.count; i++) { const k = key(i), s = sum.get(k) || [0, 0, 0]; s[0] += n.getX(i); s[1] += n.getY(i); s[2] += n.getZ(i); sum.set(k, s); }
+  const o = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) o.set(sum.get(key(i)), i * 3);
+  geo.setAttribute('onormal', new THREE.BufferAttribute(o, 3));
+  return geo;
+}
+// one visible solid: toon mesh + back-face outline child
+function solid(geo, color, { x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1, thin = false, outline = true } = {}) {
+  if (!geo.attributes.onormal) smooth(geo);
+  const m = new THREE.Mesh(geo, toon(color));
+  m.position.set(x, y, z); m.scale.set(sx, sy, sz);
+  if (outline) m.add(new THREE.Mesh(geo, thin ? OUT_THIN : OUT));
+  return m;
+}
+const G = {
+  sphere: (r, w = 20, h = 14) => new THREE.SphereGeometry(r, w, h),
+  caps: (r, len) => new THREE.CapsuleGeometry(r, len, 5, 12),
+  box: (w, h, d) => new THREE.BoxGeometry(w, h, d),
+  cyl: (r, h, s = 14) => new THREE.CylinderGeometry(r, r, h, s),
+};
+const add = (parent, ...kids) => { kids.forEach(k => parent.add(k)); return parent; };
+const grp = (x = 0, y = 0, z = 0) => { const g = new THREE.Group(); g.position.set(x, y, z); return g; };
+const Y = new THREE.Vector3(0, 1, 0);
+function tube(a, b, r, color) {
+  const d = new THREE.Vector3().subVectors(b, a), m = solid(G.cyl(r, d.length(), 8), color, { thin: true });
+  m.position.copy(a).addScaledVector(d, 0.5); m.quaternion.setFromUnitVectors(Y, d.normalize());
+  return m;
+}
+
+/* ---------- people ---------- */
+const HIP = 0.86, L1 = 0.4, L2 = 0.4; // hip height, thigh, shin
+function person({ skin, shirt, pants, shoe = 0xFFFFFF, hair = 0x3A2A1A, style = 'short', shorts = false, stripe = 0, helmet = 0, cheek = 0xF08A7E }) {
+  const root = grp(), hip = grp(0, HIP, 0), upper = grp(), head = grp(0, 0.79, 0);
+  add(root, hip); add(hip, upper);
+  // pelvis, torso, neck
+  add(hip, solid(G.sphere(0.17), pants, { sy: 0.75, sz: 0.85 }));
+  add(upper, solid(G.caps(0.17, 0.2), shirt, { y: 0.27, sz: 0.74 }));
+  if (stripe) add(upper, solid(G.cyl(0.176, 0.07, 18), stripe, { y: 0.3, sz: 0.76, outline: false }));
+  add(upper, solid(G.cyl(0.06, 0.12, 10), skin, { y: 0.58, thin: true }));
+  add(upper, head);
+  // head: skull, ears, nose, eyes, smile, cheeks
+  add(head, solid(G.sphere(0.2, 24, 18), skin, { sy: 1.04 }));
+  for (const s of [-1, 1]) {
+    add(head, solid(G.sphere(0.045), skin, { x: s * 0.2, y: -0.01, thin: true }));
+    add(head, solid(G.sphere(0.052, 14, 10), 0xFFFFFF, { x: s * 0.075, y: 0.035, z: 0.17, sz: 0.5, thin: true }));
+    add(head, solid(G.sphere(0.03, 12, 8), 0x1B1622, { x: s * 0.075, y: 0.03, z: 0.2, sz: 0.5, outline: false }));
+    add(head, solid(G.sphere(0.012, 6, 5), 0xFFFFFF, { x: s * 0.075 + 0.01, y: 0.04, z: 0.216, outline: false }));
+    add(head, solid(G.sphere(0.034, 10, 8), cheek, { x: s * 0.125, y: -0.05, z: 0.15, sz: 0.4, outline: false }));
+    const brow = solid(G.caps(0.009, 0.05), 0x2B1D12, { x: s * 0.078, y: 0.098, z: 0.178, outline: false }); brow.rotation.set(0, 0.25 * s, Math.PI / 2 + 0.12 * s);
+    add(head, brow);
+  }
+  add(head, solid(G.sphere(0.034, 10, 8), skin, { y: -0.015, z: 0.2, thin: true }));
+  const mouth = solid(new THREE.TorusGeometry(0.045, 0.009, 6, 14, Math.PI), 0x6B2A2A, { y: -0.055, z: 0.19, outline: false });
+  mouth.rotation.z = Math.PI; mouth.rotation.x = -0.15; add(head, mouth);
+  // hair / helmet
+  if (helmet) {
+    const h = solid(new THREE.SphereGeometry(0.225, 22, 14, 0, Math.PI * 2, 0, 2.0), helmet, { y: 0.005 }); h.rotation.x = -0.2; add(head, h);
+    const st = solid(new THREE.SphereGeometry(0.23, 18, 10, -0.25, 0.5, 0, 2.0), 0xFF3D2E, { y: 0.005, outline: false }); st.rotation.x = -0.2; add(head, st);
+    add(head, solid(G.sphere(0.2, 16, 8), hair, { y: -0.08, z: -0.03, sy: 0.4, sx: 0.9, thin: true }));
+  } else {
+    const cap = solid(new THREE.SphereGeometry(0.212, 22, 14, 0, Math.PI * 2, 0, style === 'bald' ? 0.5 : 1.85), hair); cap.rotation.x = -0.35; cap.position.y = 0.01; add(head, cap);
+    add(head, solid(G.sphere(0.07, 10, 8), hair, { x: 0.19, y: 0.04, z: -0.02, sy: 1.3, thin: true }), solid(G.sphere(0.07, 10, 8), hair, { x: -0.19, y: 0.04, z: -0.02, sy: 1.3, thin: true }));
+    if (style === 'pony') add(head, solid(G.caps(0.065, 0.2), hair, { y: -0.08, z: -0.26 }), solid(G.sphere(0.05, 8, 6), 0xE8537A, { y: 0.06, z: -0.22, thin: true }));
+    if (style === 'bun') add(head, solid(G.sphere(0.09), hair, { y: 0.22, z: -0.05 }));
+    if (style === 'long') add(head, solid(G.caps(0.17, 0.2), hair, { y: -0.14, z: -0.1, sz: 0.7 }));
+    if (style === 'curly') for (const [x, y, z] of [[0, 0.2, 0], [0.13, 0.16, 0.02], [-0.13, 0.16, 0.02], [0, 0.15, -0.14]]) add(head, solid(G.sphere(0.1), hair, { x, y, z }));
+    if (style === 'cap') { const br = solid(G.cyl(0.19, 0.025, 20), 0x2D6CDF, { y: 0.07, z: 0.17, sz: 0.65 }); br.rotation.x = 0.1; add(head, br); }
+  }
+  // arms: shoulder -> elbow -> hand
+  const arm = s => {
+    const sh = grp(s * 0.235, 0.47, 0), el = grp(0, -0.3, 0);
+    add(sh, solid(G.sphere(0.075), shirt, { thin: true }), solid(G.caps(0.062, 0.18), shirt, { y: -0.15, thin: true }), el);
+    add(el, solid(G.caps(0.05, 0.17), skin, { y: -0.14, thin: true }), solid(G.sphere(0.065), skin, { y: -0.31, thin: true }));
+    add(upper, sh); return { sh, el };
+  };
+  // legs: hip -> knee -> shoe
+  const leg = s => {
+    const hp = grp(s * 0.1, 0, 0), kn = grp(0, -L1, 0);
+    add(hp, solid(G.caps(0.085, 0.22), pants, { y: -0.2, thin: true }), kn);
+    add(kn, solid(G.caps(0.065, 0.26), shorts ? skin : pants, { y: -0.2, thin: true }), solid(G.sphere(0.08, 14, 10), shoe, { y: -0.42, z: 0.06, sx: 0.95, sy: 0.6, sz: 1.5, thin: true }));
+    add(hip, hp); return { hp, kn };
+  };
+  const o = { root, hip, upper, head, A: [arm(-1), arm(1)], L: [leg(-1), leg(1)] };
+  return o;
+}
+
+// two-bone IK in the (z,y) plane of the parent; elbow/knee bend direction `bend` (+1 forward/up)
+function ik(limb, from, to, l1, l2, bend, parentRot = 0) {
+  const dz = to.z - from.z, dy = to.y - from.y;
+  const d = Math.min(Math.hypot(dz, dy), l1 + l2 - 0.002), phi = Math.atan2(dz, -dy);
+  const a = Math.acos(Math.max(-1, Math.min(1, (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d))));
+  const t1 = phi + bend * a, kz = from.z + l1 * Math.sin(t1), ky = from.y - l1 * Math.cos(t1);
+  const t2 = Math.atan2(to.z - kz, -(to.y - ky));
+  limb[0].rotation.x = -t1 + parentRot; limb[1].rotation.x = -(t2 - t1);
+}
+
+/* ---------- bike (front = +z) ---------- */
+function bike(color, basket) {
+  const b = grp(), W = 0.37, V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const wheel = z => {
+    const w = grp(0, W, z);
+    add(w, solid(new THREE.TorusGeometry(W - 0.03, 0.045, 8, 32), 0x2C2833), solid(new THREE.TorusGeometry(W - 0.07, 0.014, 5, 32), 0xDAD6CC, { outline: false }), solid(G.sphere(0.05, 10, 8), 0xDAD6CC, { thin: true }));
+    for (let i = 0; i < 3; i++) { const s = solid(G.cyl(0.008, (W - 0.07) * 2, 4), 0xDAD6CC, { outline: false }); s.rotation.z = i * Math.PI / 3; w.add(s); }
+    w.rotation.y = Math.PI / 2; // torus lies in xy; turn it to the zy plane
+    const wrap = grp(0, 0, z); wrap.position.y = W; add(wrap, w); w.position.set(0, 0, 0);
+    return wrap;
+  };
+  const rw = wheel(-0.58), fw = wheel(0.58); b.userData.wheels = [rw, fw];
+  const bb = V(0, 0.36, 0), seat = V(0, 0.98, -0.24), ht = V(0, 0.92, 0.42), htb = V(0, 0.76, 0.47), rh = V(0, W, -0.58), fh = V(0, W, 0.58);
+  add(b, rw, fw, tube(bb, seat, 0.028, color), tube(seat.clone().setY(0.88), ht, 0.026, color), tube(bb, htb, 0.032, color), tube(bb, rh, 0.02, color), tube(seat, rh, 0.018, color),
+    tube(htb, fh, 0.024, 0x5A5560), tube(htb, V(0, 1.02, 0.4), 0.026, 0x5A5560), tube(V(-0.3, 1.04, 0.38), V(0.3, 1.04, 0.38), 0.022, 0x2C2833),
+    solid(G.sphere(0.04, 8, 6), 0x2C2833, { x: 0.3, y: 1.04, z: 0.38, sz: 1.6, thin: true }), solid(G.sphere(0.04, 8, 6), 0x2C2833, { x: -0.3, y: 1.04, z: 0.38, sz: 1.6, thin: true }),
+    solid(G.caps(0.05, 0.16), 0x2C2833, { y: 1.0, z: -0.24, sx: 0.9, sy: 0.6, sz: 1.2, thin: true }).rotateX(Math.PI / 2));
+  const crank = grp(0, 0.36, 0); add(b, crank, solid(G.cyl(0.07, 0.04, 14), 0xDAD6CC, { x: 0.05, y: 0.36, thin: true }).rotateZ(Math.PI / 2));
+  for (const s of [-1, 1]) {
+    const arm = tube(V(s * 0.1, 0, 0), V(s * 0.1, s * 0.15, 0), 0.015, 0xDAD6CC), ped = solid(G.box(0.12, 0.025, 0.1), 0x2C2833, { x: s * 0.16, y: s * 0.15, thin: true });
+    add(crank, arm, ped);
+  }
+  b.userData.crank = crank;
+  if (basket) { // player: yellow rear basket
+    add(b, tube(V(0, 0.86, -0.3), V(0, 0.92, -0.72), 0.014, 0x5A5560), solid(G.box(0.34, 0.14, 0.26), 0xFFD23F, { y: 0.98, z: -0.76 }), solid(G.box(0.36, 0.04, 0.28), 0xFF3D2E, { y: 1.07, z: -0.76, thin: true }));
+  }
+  return b;
+}
+
+// puts a person on a bike and animates pedalling. phase in radians
+function rider(p, bk, phase, lean = 0.55) {
+  const hipP = new THREE.Vector3(0, 1.0, -0.26);
+  p.root.position.set(0, 0, 0); p.hip.position.copy(hipP);
+  p.upper.rotation.x = -lean; p.head.rotation.x = lean * 0.75;
+  bk.userData.crank.rotation.x = phase;
+  [0, 1].forEach(i => {
+    const s = i ? 1 : -1, a = phase + (i ? Math.PI : 0); // pedal height/forward
+    const dir = i ? 1 : -1, foot = { z: Math.sin(a) * 0.15 * dir, y: 0.36 + Math.cos(a) * 0.15 * dir + 0.095 };
+    ik([p.L[i].hp, p.L[i].kn], { z: hipP.z, y: hipP.y }, foot, L1, L2, 1);
+    p.L[i].hp.position.x = s * 0.1;
+  });
+  const shoulder = { z: hipP.z + 0.47 * Math.sin(lean), y: hipP.y + 0.47 * Math.cos(lean) }, grip = { z: 0.38, y: 1.04 };
+  [0, 1].forEach(i => ik([p.A[i].sh, p.A[i].el], shoulder, grip, 0.3, 0.3, -1, lean));
+  return p;
+}
+function walk(p, t, speed = 1) {
+  const s = Math.sin(t * speed);
+  p.L[0].hp.rotation.x = -s * 0.55; p.L[1].hp.rotation.x = s * 0.55;
+  p.L[0].kn.rotation.x = Math.max(0, s) * 0.8 + 0.05; p.L[1].kn.rotation.x = Math.max(0, -s) * 0.8 + 0.05;
+  p.A[0].sh.rotation.x = s * 0.5; p.A[1].sh.rotation.x = -s * 0.5; p.A[0].el.rotation.x = -0.3; p.A[1].el.rotation.x = -0.3;
+  p.hip.position.y = HIP + Math.abs(Math.cos(t * speed)) * 0.03;
+}
+const blob = (w, l) => { const m = new THREE.Mesh(new THREE.CircleGeometry(1, 20), new THREE.MeshBasicMaterial({ color: 0x1B2A10, transparent: true, opacity: 0.2, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })); m.rotation.x = -Math.PI / 2; m.scale.set(w, l, 1); m.position.y = 0.04; return m; };
+
+/* ---------- scenery ---------- */
+function house(wall, roof, trim = 0x4C7A8C) {
+  const h = grp();
+  add(h, solid(G.box(6, 3, 5), wall, { y: 1.5 }), solid(G.box(6.3, 0.25, 5.3), 0xE9E1CF, { y: 0.1 }));
+  const sh = new THREE.Shape(); sh.moveTo(-3.5, 0); sh.lineTo(3.5, 0); sh.lineTo(0, 2); sh.closePath();
+  const rg = new THREE.ExtrudeGeometry(sh, { depth: 5.8, bevelEnabled: false }); rg.translate(0, 3, -2.9);
+  const r = solid(rg, roof); r.rotation.y = 0; add(h, r);
+  // tile lines
+  for (let i = 1; i < 4; i++) add(h, solid(G.box(7.1 - i * 1.55, 0.05, 5.9), 0x9D3A26, { y: 3 + i * 0.5 - 0.02, outline: false }));
+  add(h, solid(G.box(0.8, 1.6, 0.8), 0xD9CDB5, { x: 1.7, y: 4.4, z: -1.2 }), solid(G.box(1, 0.2, 1), 0x8E8576, { x: 1.7, y: 5.2, z: -1.2 }));
+  // door with arch, windows with shutters
+  add(h, solid(G.box(1.1, 2, 0.15), trim, { x: -1.3, y: 1, z: 2.55 }), solid(G.cyl(0.55, 0.15, 14), trim, { x: -1.3, y: 2, z: 2.55 }).rotateX(Math.PI / 2), solid(G.sphere(0.07, 8, 6), 0xFFD23F, { x: -0.95, y: 1, z: 2.66, thin: true }));
+  for (const x of [1.3]) add(h, solid(G.box(1.5, 1.2, 0.15), 0xBFE7F4, { x, y: 1.9, z: 2.55 }), solid(G.box(0.1, 1.2, 0.2), 0xFFFFFF, { x, y: 1.9, z: 2.58, outline: false }), solid(G.box(1.5, 0.1, 0.2), 0xFFFFFF, { x, y: 1.9, z: 2.58, outline: false }),
+    solid(G.box(0.5, 1.2, 0.12), trim, { x: x - 1.0, y: 1.9, z: 2.55 }), solid(G.box(0.5, 1.2, 0.12), trim, { x: x + 1.0, y: 1.9, z: 2.55 }), solid(G.box(1.7, 0.18, 0.4), 0xD9CDB5, { x, y: 1.25, z: 2.7 }));
+  add(h, solid(G.sphere(0.18, 10, 8), 0xE8537A, { x: 0.8, y: 1.5, z: 2.7, thin: true }), solid(G.sphere(0.18, 10, 8), 0xFFFFFF, { x: 1.3, y: 1.5, z: 2.7, thin: true }), solid(G.sphere(0.18, 10, 8), 0xFFD23F, { x: 1.8, y: 1.5, z: 2.7, thin: true }));
+  add(h, solid(G.box(1.6, 0.18, 1.6), 0xD9CDB5, { x: -1.3, y: 0.09, z: 3.3 }));
+  return h;
+}
+function eucalyptus(s = 1) {
+  const t = grp(); t.scale.setScalar(s);
+  const trunk = solid(G.cyl(0.22, 3.4, 8), 0x8A6240, { y: 1.7 }); trunk.rotation.z = 0.08;
+  add(t, trunk, solid(G.sphere(1.9, 16, 12), 0x6FB07F, { y: 4.6, sy: 0.9 }), solid(G.sphere(1.4, 14, 10), 0x7CC08C, { x: 1.4, y: 5.6, z: 0.3 }), solid(G.sphere(1.3, 14, 10), 0x5FA070, { x: -1.3, y: 5.2, z: -0.4 }));
+  return t;
+}
+function cypress(s = 1) {
+  const t = grp(); t.scale.setScalar(s);
+  add(t, solid(G.cyl(0.18, 0.8, 8), 0x8A6240, { y: 0.4 }), solid(G.sphere(1, 16, 14), 0x2F7A45, { y: 3.4, sx: 0.85, sy: 3.1, sz: 0.85 }), solid(G.sphere(0.7, 12, 10), 0x3E9457, { x: 0.15, y: 2.4, z: 0.5, sy: 1.8, outline: false }));
+  return t;
+}
+function tower() {
+  const t = grp();
+  for (const x of [-1, 1]) for (const z of [-1, 1]) { const l = tube(new THREE.Vector3(x * 2, 0, z * 2), new THREE.Vector3(x * 1.4, 11, z * 1.4), 0.2, 0xBDB8AE); add(t, l); }
+  add(t, solid(G.cyl(2.4, 3.2, 18), 0xF0EADB, { y: 12.6 }), solid(new THREE.ConeGeometry(2.6, 1.6, 18), 0xD04A32, { y: 15 }), solid(G.cyl(2.45, 0.35, 18), 0x2E6F8E, { y: 12.8, outline: false }));
+  return t;
+}
+function cloud(s) {
+  const c = grp(); c.scale.setScalar(s);
+  for (const [x, y, r] of [[0, 0, 4], [4.2, -0.6, 3], [-4, -0.7, 2.8], [2, 1.8, 3]]) add(c, solid(G.sphere(r, 14, 10), 0xFFFFFF, { x, y, sz: 0.6 }));
+  return c;
+}
+
+/* ---------- scene ---------- */
+const canvas = document.getElementById('game');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene(); scene.fog = new THREE.Fog(FOG, FOG_NEAR, FOG_FAR);
+const cam = new THREE.PerspectiveCamera(62, 16 / 9, 0.3, 220);
+const sun = new THREE.DirectionalLight(0xFFF1D6, 2.2); sun.position.set(-30, 50, 20);
+scene.add(sun, new THREE.HemisphereLight(0xCFEFFF, 0xBFD98A, 1.9));
+
+// sky dome, hills, clouds
+const sg = new THREE.SphereGeometry(200, 16, 10), sc = [];
+for (let i = 0; i < sg.attributes.position.count; i++) { const c = new THREE.Color(0xCDEBFA).lerp(new THREE.Color(0x3FA9F0), Math.pow(Math.max(0, Math.min(1, sg.attributes.position.getY(i) / 120)), 0.8)); sc.push(c.r, c.g, c.b); }
+sg.setAttribute('color', new THREE.Float32BufferAttribute(sc, 3));
+const sky = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false })); sky.renderOrder = -1; scene.add(sky);
+scene.add(solid(G.sphere(1, 24, 12), 0xA7C98B, { x: -60, y: -6, z: 150, sx: 70, sy: 22, sz: 30, outline: false }), solid(G.sphere(1, 24, 12), 0x9CC283, { x: 50, y: -8, z: 160, sx: 80, sy: 26, sz: 30, outline: false }));
+const cl = cloud(1.3); cl.position.set(-30, 40, 120); const cl2 = cloud(1); cl2.position.set(40, 48, 140); const cl3 = cloud(0.8); cl3.position.set(8, 34, 130); scene.add(cl, cl2, cl3);
+
+// ground: instanced 8 m squares in two greens
+const cellG = new THREE.PlaneGeometry(8, 8).rotateX(-Math.PI / 2), nx = 16, nz = 28;
+const ground = new THREE.InstancedMesh(cellG, new THREE.MeshToonMaterial({ gradientMap: grad }), nx * nz), mm = new THREE.Matrix4();
+for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) { const k = i * nz + j; ground.setMatrixAt(k, mm.makeTranslation(-64 + i * 8 + 4, 0, -24 + j * 8 + 4)); ground.setColorAt(k, new THREE.Color((i + j) & 1 ? 0x8ED043 : 0x7CC338)); }
+scene.add(ground);
+
+// path: curved ribbon with cream kerb and ink edge
+const bendX = z => 0.0016 * z * z;
+function ribbon(half, y, color) {
+  const v = [], idx = [], N = 60;
+  for (let i = 0; i <= N; i++) { const z = -25 + i * 3.5, x = bendX(z); v.push(x - half, y, z, x + half, y, z); if (i < N) idx.push(i * 2, i * 2 + 2, i * 2 + 1, i * 2 + 1, i * 2 + 2, i * 2 + 3); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); g.setIndex(idx); g.computeVertexNormals();
+  return new THREE.Mesh(g, toon(color));
+}
+scene.add(ribbon(2.55, 0.02, 0x2A2233), ribbon(2.4, 0.03, 0xF4EEDF), ribbon(2.0, 0.045, 0xCFC6B4));
+// dashed centre line
+for (let z = -20; z < 150; z += 4) { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 1.6).rotateX(-Math.PI / 2), toon(0xF4EEDF)); m.position.set(bendX(z), 0.055, z); m.rotation.y = -Math.atan(0.0032 * z); scene.add(m); }
+// flowers and tufts
+const fl = new THREE.InstancedMesh(new THREE.SphereGeometry(0.12, 6, 5), new THREE.MeshToonMaterial({ gradientMap: grad }), 160);
+for (let i = 0; i < 160; i++) { const z = -8 + (i * 29.3) % 120, side = i & 1 ? 1 : -1, x = bendX(z) + side * (3.4 + (i * 7.7) % 18); fl.setMatrixAt(i, mm.makeTranslation(x, 0.12, z)); fl.setColorAt(i, new THREE.Color([0xFFFFFF, 0xFFD23F, 0xFF8FB1][i % 3])); }
+scene.add(fl);
+
+// props
+const H1 = house(0xFFF1D6, 0xD2573A); H1.position.set(bendX(16) + 8.5, 0, 16); H1.rotation.y = -Math.PI / 2 - 0.1; scene.add(H1);
+const H2 = house(0xFBE7B8, 0xC24A32, 0x2E8FA3); H2.position.set(bendX(42) - 9.5, 0, 42); H2.rotation.y = Math.PI / 2 + 0.1; scene.add(H2);
+const H3 = house(0xE9F1D8, 0x3F7DB8, 0xD2573A); H3.position.set(bendX(30) + 12, 0, 62); H3.rotation.y = -Math.PI / 2; scene.add(H3);
+for (const [x, z, k, s] of [[-9.5, 9, 'e', 0.9], [-9, 20, 'c', 1.2], [-6, 30, 'e', 1.1], [7, -2, 'c', 1], [5.5, 36, 'e', 1], [-14, 2, 'e', 1.2], [11, 7, 'c', 0.9], [4.8, 52, 'c', 1.1]]) { const t = k === 'e' ? eucalyptus(s) : cypress(s); t.position.set(bendX(z) + x, 0, z); t.rotation.y = x * 3; scene.add(t); }
+const T = tower(); T.position.set(-28, 0, 85); scene.add(T);
+
+// characters
+const player = person({ skin: 0xF1C9A0, shirt: 0xFFD23F, pants: 0x34406B, shoe: 0xFFFFFF, hair: 0x3A2A1A, helmet: 0xFFFFFF, stripe: 0xFF3D2E });
+const pBike = bike(0xFF3D2E, true), P = grp(0, 0, 0); add(P, pBike, player.root); rider(player, pBike, 0.9); scene.add(P);
+const ai = person({ skin: 0xC68E5E, shirt: 0x2D6CDF, pants: 0x34406B, hair: 0x1E1A16, style: 'curly', stripe: 0xFFFFFF, helmet: 0 });
+const aBike = bike(0x2D6CDF, false), A = grp(-0.7, 0, 9.5); add(A, aBike, ai.root); rider(ai, aBike, 2.4, 0.5); A.rotation.y = 0.04; scene.add(A);
+const w1 = person({ skin: 0x8D5A3B, shirt: 0xD96C8E, pants: 0x4A4F63, hair: 0x1E1A16, style: 'bun', shoe: 0x3A3340 });
+const W1 = grp(bendX(6) + 1.3, 0, 6.6); add(W1, w1.root); W1.rotation.y = Math.PI + 0.35; scene.add(W1);
+const w2 = person({ skin: 0xF1C9A0, shirt: 0x5AA0D8, pants: 0x6B5B45, hair: 0x8A5A2B, style: 'pony', shorts: true, shoe: 0x3A3340 });
+const W2 = grp(bendX(14) - 1.5, 0, 14); add(W2, w2.root); W2.rotation.y = 0.15; scene.add(W2);
+const w3 = person({ skin: 0xC68E5E, shirt: 0x9AA0A6, pants: 0x4A4F63, hair: 0xB8B2A8, style: 'cap', shoe: 0xFFFFFF });
+const W3 = grp(bendX(24) + 2.9, 0, 24); add(W3, w3.root); W3.rotation.y = Math.PI - 0.3; scene.add(W3);
+walk(w1, 0.8); walk(w2, 2.2); walk(w3, 4.1);
+for (const [o, w, l] of [[P, 0.5, 1.0], [A, 0.5, 0.95], [W1, 0.55, 0.55], [W2, 0.55, 0.55], [W3, 0.55, 0.55]]) { const b = blob(w, l); o.add(b); }
+
+// camera
+const close = new URLSearchParams(location.search).has('close');
+function setCam() {
+  if (!close) { cam.position.set(0.35, 2.4, -4.7); cam.lookAt(0.0, 1.0, 6); return; }
+  document.getElementById('hud').hidden = true; // people close-up: line them up facing the camera
+  P.rotation.y = Math.PI - 0.55; P.position.set(0.9, 0, 0.6); A.rotation.y = Math.PI + 0.5; A.position.set(-1.0, 0, 1.2);
+  W1.position.set(2.6, 0, -0.9); W1.rotation.y = Math.PI + 0.2; W2.position.set(-2.4, 0, -0.9); W2.rotation.y = Math.PI - 0.25; W3.position.set(0.3, 0, -1.2); W3.rotation.y = Math.PI;
+  cam.position.set(0.2, 1.3, -4.2); cam.lookAt(0.2, 0.95, 0); cam.fov = 40; cam.updateProjectionMatrix();
+}
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize(); setCam();
+const t0 = performance.now();
+function frame() {
+  const t = (performance.now() - t0) / 1000;
+  rider(player, pBike, 0.9 + t * 4); rider(ai, aBike, 2.4 + t * 4, 0.5);
+  pBike.userData.wheels.forEach(w => w.children[0].rotation.x = t * 8);
+  walk(w1, 0.8 + t * 5); walk(w2, 2.2 + t * 5); walk(w3, 4.1 + t * 5);
+  sky.position.copy(cam.position);
+  renderer.render(scene, cam);
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>
