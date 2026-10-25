@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="robots" content="noindex">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Kibbutz Bike Race - v2 look preview</title>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
@@ -314,14 +315,7 @@ walk(w1, 0.8); walk(w2, 2.2); walk(w3, 4.1);
 for (const [o, w, l] of [[P, 0.5, 1.0], [A, 0.5, 0.95], [W1, 0.55, 0.55], [W2, 0.55, 0.55], [W3, 0.55, 0.55]]) { const b = blob(w, l); o.add(b); }
 
 // camera
-const close = new URLSearchParams(location.search).has('close');
-function setCam() {
-  if (!close) { cam.position.set(0.35, 2.4, -4.7); cam.lookAt(0.0, 1.0, 6); return; }
-  document.getElementById('hud').hidden = true; // people close-up: line them up facing the camera
-  P.rotation.y = Math.PI - 0.55; P.position.set(0.9, 0, 0.6); A.rotation.y = Math.PI + 0.5; A.position.set(-1.0, 0, 1.2);
-  W1.position.set(2.6, 0, -0.9); W1.rotation.y = Math.PI + 0.2; W2.position.set(-2.4, 0, -0.9); W2.rotation.y = Math.PI - 0.25; W3.position.set(0.3, 0, -1.2); W3.rotation.y = Math.PI;
-  cam.position.set(0.2, 1.3, -4.2); cam.lookAt(0.2, 0.95, 0); cam.fov = 40; cam.updateProjectionMatrix();
-}
+function setCam() { cam.position.set(0.35, 2.4, -4.7); cam.lookAt(0.0, 1.0, 6); }
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize(); setCam();
 const t0 = performance.now();
