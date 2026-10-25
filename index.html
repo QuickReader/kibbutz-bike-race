@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#8FD0EE">
+<meta name="theme-color" content="#CDEBFA">
 <title>Kibbutz Bike Race</title>
 <link rel="stylesheet" href="style.css">
 <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
@@ -14,9 +14,9 @@
 <div id="vig"></div>
 
 <div id="hud" hidden>
-  <div class="pill" id="pos"><b>1</b>/4</div>
+  <div class="pill" id="pos"><b>1</b><span>/4</span></div>
   <div class="pill" id="timer">0:00.0</div>
-  <div class="pill" id="bar"><i id="d0"></i><i id="d1"></i><i id="d2"></i><i id="d3"></i><span class="flag"></span></div>
+  <div class="pill" id="bar"><div class="fill" id="fill"></div><i id="d3"></i><i id="d2"></i><i id="d1"></i><i id="d0"></i><span class="flag"></span></div>
 </div>
 <div id="count" aria-live="assertive"></div>
 <div id="oops" aria-hidden="true">Oops!</div>
@@ -25,7 +25,7 @@
   <h1>Kibbutz<br>Bike Race</h1>
   <span class="sticker">to the chadar ochel!</span>
   <button id="start" class="btn">Tap to start</button>
-  <p class="how"><span class="arrow"></span><span class="arrow"></span>Hold left or right side to steer. You pedal by yourself.</p>
+  <p class="how"><span class="arrow"></span><span class="arrow"></span>Hold the left or right side of the screen (or use the arrow keys) to steer. You pedal by yourself.</p>
 </main>
 
 <section id="results" hidden>

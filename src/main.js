@@ -6,7 +6,7 @@ import { TRACK } from './track.js';
 const $ = id => document.getElementById(id);
 const sim = createSim(), view = createRenderer($('game'), sim);
 let me = sim.riders[0]; // reset() builds new rider objects, so refresh after it
-const STEP = 1 / 60, portrait = matchMedia('(orientation: portrait)');
+const STEP = 1 / 60, portrait = matchMedia('(orientation: portrait) and (pointer: coarse)');
 let state = 'menu', acc = 0, last = performance.now(), count = 3, endWait = 0, shownPlace = 1, lastFall = 0;
 
 // input: left/right half of the screen (touch) or arrow keys
@@ -80,6 +80,7 @@ function hud() {
     shownPlace = me.place; $('pos').firstChild.textContent = me.place;
   }
   sim.riders.forEach((r, i) => $('d' + i).style.left = Math.min(100, r.progress / TRACK.finish * 100) + '%');
+  $('fill').style.width = Math.min(100, me.progress / TRACK.finish * 100) + '%';
   if (me.fall > 0 && lastFall <= 0) { retrigger($('oops'), 'on', 1300); retrigger($('vig'), 'on', 300); }
   lastFall = me.fall;
 }
