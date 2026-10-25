@@ -12,7 +12,7 @@
 - 2026-10-25 — Riders pass through each other in v1. — Leader
 - 2026-10-25 — System font only; AI riders named Avi, Noa, Tamar. — Leader (on design rec)
 - 2026-10-25 — Grass = 50% speed; AI times fast-forwarded after player finishes. — frontend
-- 2026-10-25 — Git identity QuickReader + GitHub no-reply email; rewrote 5 unpushed commits to hide Gmail. — user
+- 2026-10-25 — Git identity QuickReader + GitHub no-reply email; set no-reply git identity on all commits. — user
 - 2026-10-25 — Licence: all rights reserved (QuickReader). Privacy line in README only. — user
 - 2026-10-25 — No CSP in v1 (no external requests; breakage risk > gain). — Leader (on security rec)
 - 2026-10-25 — Published: public repo QuickReader/kibbutz-bike-race, GitHub Pages from main → https://quickreader.github.io/kibbutz-bike-race/ — user
@@ -23,3 +23,4 @@
 - 2026-10-25 — v2 look approved from preview (DESIGN.md v2, preview.html). Menu camera = front-facing rider shot. Font = system rounded stack, no download. — user
 - 2026-10-25 — User pre-approved publishing v2 (merge to main + push to GitHub Pages) once build and reviews pass. — user
 - 2026-10-25 — Portrait 'turn your phone' notice only on touch devices (pointer: coarse) so it never blocks desktop. Auto lowers resolution if frames are slow. — frontend, Leader approved
+- 2026-10-25 — v2 passed QA, Design, Security, ponytail review; review fixes applied (near-camera hiding, FINISH sign, menu layout, lighter results, ~40% fewer triangles). Merged and published. — Leader (user pre-approved)
