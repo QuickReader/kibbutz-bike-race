@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#8FD0EE">
+<title>Kibbutz Bike Race</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
+</head>
+<body>
+<canvas id="game" aria-label="Race view"></canvas>
+<div class="tint l" id="tint-l"></div><div class="tint r" id="tint-r"></div>
+<div id="vig"></div>
+
+<div id="hud" hidden>
+  <div class="pill" id="pos"><b>1</b>/4</div>
+  <div class="pill" id="timer">0:00.0</div>
+  <div class="pill" id="bar"><i id="d0"></i><i id="d1"></i><i id="d2"></i><i id="d3"></i><span class="flag"></span></div>
+</div>
+<div id="count" aria-live="assertive"></div>
+<div id="oops" aria-hidden="true">Oops!</div>
+
+<main id="menu">
+  <h1>Kibbutz<br>Bike Race</h1>
+  <span class="sticker">to the chadar ochel!</span>
+  <button id="start" class="btn">Tap to start</button>
+  <p class="how"><span class="arrow">&#9664;</span><span class="arrow">&#9654;</span> Hold left or right side to steer. You pedal by yourself.</p>
+</main>
+
+<section id="results" hidden>
+  <div class="panel">
+    <h2 id="title">Race over!</h2>
+    <ol id="rows"></ol>
+    <button id="again" class="btn">Race again</button>
+  </div>
+</section>
+
+<div id="rotate"><div class="card"><div class="phone"></div><p>Turn your phone sideways</p></div></div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
