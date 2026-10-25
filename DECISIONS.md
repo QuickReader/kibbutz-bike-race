@@ -21,3 +21,5 @@
 - 2026-10-25 — v2 platform: phone + desktop, both tested; keep screen-half steering on phone, no sound. — user
 - 2026-10-25 — v2 ships on a branch; replaces the live page only after user approval. — user
 - 2026-10-25 — v2 look approved from preview (DESIGN.md v2, preview.html). Menu camera = front-facing rider shot. Font = system rounded stack, no download. — user
+- 2026-10-25 — User pre-approved publishing v2 (merge to main + push to GitHub Pages) once build and reviews pass. — user
+- 2026-10-25 — Portrait 'turn your phone' notice only on touch devices (pointer: coarse) so it never blocks desktop. Auto lowers resolution if frames are slow. — frontend, Leader approved
