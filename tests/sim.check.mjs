@@ -26,6 +26,15 @@ Object.assign(sim.walkers[0], { x: 9e3 }); sim.walkers[0].stumble = 0; Object.as
 for (let i = 0; i < 125; i++) sim.update(1 / 60, 0);
 assert.equal(me.fall, 0, 'fall ends after ~2 s');
 
+// a rider parked on a walker falls at most once every 3 s
+sim = createSim();
+const w0 = sim.walkers[0], pk = sim.riders[0];
+Object.assign(w0, { ax: pk.x, az: pk.z, bx: pk.x, bz: pk.z, len: 1e9, t: 0, speed: 0 });
+pk.max = 0;
+let falls = 0, was = 0;
+for (let i = 0; i < 60 * 12; i++) { sim.update(1 / 60, 0); w0.stumble = 0; Object.assign(w0, { x: pk.x, z: pk.z }); if (pk.fall > 0 && was <= 0) falls++; was = pk.fall; }
+assert.ok(falls >= 2 && falls <= 4, 'repeat falls are spaced >= 3 s apart, got ' + falls);
+
 // grass slows a rider
 sim = createSim();
 const g = sim.riders[0]; g.onRoad = false;

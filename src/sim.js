@@ -6,7 +6,8 @@ const MAX = [9, 8.6, 8.8, 8.4];       // top speed on the path, m/s
 const LANE = [-0.5, -1.5, 0.5, 1.5];  // start lateral offset (left +)
 const AIM = [0, -0.7, 0.6, 0];        // AI preferred lane
 const R = 0.45, WALKER_R = 0.4;
-const TURN = 1.7, ACC = 6, GRASS = 0.5, FALL = 2, STUMBLE = 1.2;
+const TURN = 1.7, ACC = 6, GRASS = 0.5, STUMBLE = 1.2, SAFE = 1; // SAFE: seconds of immunity after getting up
+export const FALL = 2;
 
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -19,7 +20,7 @@ export function createSim() {
     sim.time = 0; sim.over = false;
     sim.riders = NAMES.map((name, id) => {
       const p = pointAt(1, LANE[id], { x: 0, z: 0, h: 0 });
-      return { id, name, x: p.x, z: p.z, heading: p.h, speed: 0, steer: 0, fall: 0, penalty: 0,
+      return { id, name, x: p.x, z: p.z, heading: p.h, speed: 0, steer: 0, fall: 0, safe: 0, penalty: 0,
         seg: 0, progress: 1, onRoad: true, finishTime: null, place: id + 1, ai: id > 0, max: MAX[id], lane: AIM[id] };
     });
     sim.walkers = TRACK.walkers.map(w => {
@@ -49,6 +50,7 @@ export function createSim() {
   function stepRider(r, dt, input) {
     const done = r.finishTime !== null, falling = r.fall > 0;
     r.fall = Math.max(0, r.fall - dt);
+    if (falling && r.fall === 0) r.safe = SAFE; else r.safe = Math.max(0, r.safe - dt);
     const want = falling ? 0 : r.ai || done ? aiSteer(r) : input;
     r.steer += (want - r.steer) * Math.min(1, 10 * dt);
     r.heading -= r.steer * TURN * dt * Math.min(1, r.speed / 3);
@@ -58,10 +60,10 @@ export function createSim() {
     r.z += Math.cos(r.heading) * r.speed * dt;
 
     for (const c of TRACK.colliders) {
-      const dx = r.x - c.x, dz = r.z - c.z, d = Math.hypot(dx, dz), min = R + c.r;
+      const dx = r.x - c.x, dz = r.z - c.z, d = Math.hypot(dx, dz) || 1e-6, min = R + c.r;
       if (d < min) { r.x = c.x + dx / d * min; r.z = c.z + dz / d * min; r.speed = Math.min(r.speed, 1.5); }
     }
-    if (!falling && !done)
+    if (!falling && !done && r.safe <= 0)
       for (const w of sim.walkers) {
         if (Math.hypot(r.x - w.x, r.z - w.z) >= R + WALKER_R) continue;
         r.fall = FALL; r.penalty += FALL; r.speed = 0; r.steer = 0;
