@@ -1,6 +1,7 @@
 // Builds the 3D scene from TRACK and draws sim state. Never changes sim state.
 import * as THREE from 'three';
 import { TRACK, pointAt } from './track.js';
+import { FALL } from './sim.js';
 
 const hex = h => new THREE.Color(h);
 const MAT = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
@@ -57,9 +58,9 @@ const TREE = [
 ].map(merge);
 
 function person(shirt, pants, skin, hair, stripe) {
-  const body = mesh([box(0.6, 0.7, 0.35, 0, 1.05, 0, shirt), ...(stripe ? [box(0.62, 0.15, 0.37, 0, 1.1, 0, 0xFFFFFF)] : []), box(0.4, 0.4, 0.4, 0, 1.6, 0, skin), box(0.44, 0.15, 0.44, 0, 1.87, 0, hair)]);
+  const body = mesh([box(0.6, 0.7, 0.35, 0, 1.05, 0, shirt), ...(stripe ? [box(0.62, 0.15, 0.37, 0, 1.1, 0, 0xFFFFFF)] : []), box(0.4, 0.4, 0.4, 0, 1.6, 0, skin), box(0.46, 0.2, 0.46, 0, 1.88, 0, hair)]);
   const limb = (w, h, c) => { const g = box(w, h, w, 0, -h / 2, 0, c); return new THREE.Mesh(g, MAT); };
-  const g = new THREE.Group(), legs = [-0.15, 0.15].map(x => limb(0.25, 0.7, pants)), arms = [-0.4, 0.4].map(x => limb(0.2, 0.6, shirt));
+  const g = new THREE.Group(), legs = [0, 1].map(() => limb(0.25, 0.7, pants)), arms = [0, 1].map(() => limb(0.2, 0.6, shirt));
   legs.forEach((l, i) => l.position.set(i ? 0.15 : -0.15, 0.7, 0));
   arms.forEach((a, i) => a.position.set(i ? 0.4 : -0.4, 1.35, 0));
   g.add(body, ...legs, ...arms);
@@ -68,23 +69,23 @@ function person(shirt, pants, skin, hair, stripe) {
 
 function bike(color) {
   return mesh([box(0.1, 0.7, 0.7, 0, 0.35, 0.65, 0x2A2A2A), box(0.1, 0.7, 0.7, 0, 0.35, -0.65, 0x2A2A2A),
-    box(0.1, 0.1, 1.3, 0, 0.55, 0, color), box(0.1, 0.5, 0.1, 0, 0.8, 0.45, color, 0), box(0.5, 0.1, 0.1, 0, 1.05, 0.55, 0x2A2A2A),
+    box(0.1, 0.1, 1.3, 0, 0.55, 0, color), box(0.1, 0.5, 0.1, 0, 0.8, 0.45, color), box(0.5, 0.1, 0.1, 0, 1.05, 0.55, 0x2A2A2A),
     box(0.2, 0.08, 0.3, 0, 0.95, -0.35, 0x2A2A2A), box(0.12, 0.12, 0.5, 0, 0.6, 0.65, color)]);
 }
 
 export function createRenderer(canvas, sim) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
   renderer.setPixelRatio(1);
-  const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(62, 2, 0.3, 120);
-  scene.fog = new THREE.Fog(0xDFF1F5, 35, 90);
-  const sun = new THREE.DirectionalLight(0xFFF1D6, 2.0);
+  const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(62, 2, 0.3, 140);
+  scene.fog = new THREE.Fog(0xDFF1F5, 55, 110);
+  const sun = new THREE.DirectionalLight(0xFFF1D6, 2.6);
   sun.position.set(-30, 50, 20);
-  scene.add(sun, new THREE.HemisphereLight(0xBFE3F5, 0x8DBE4F, 2));
+  scene.add(sun, new THREE.HemisphereLight(0xBFE3F5, 0xF0E2C0, 1.6));
 
   // sky dome follows the camera
   const sg = new THREE.SphereGeometry(100, 8, 6), sc = [];
   for (let i = 0; i < sg.attributes.position.count; i++) {
-    const c = hex(0xDFF1F5).lerp(hex(0x8FD0EE), Math.max(0, Math.min(1, sg.attributes.position.getY(i) / 60)));
+    const c = hex(0xDFF1F5).lerp(hex(0x8FD0EE), Math.max(0, Math.min(1, sg.attributes.position.getY(i) / 35)));
     sc.push(c.r, c.g, c.b);
   }
   sg.setAttribute('color', new THREE.Float32BufferAttribute(sc, 3));
@@ -141,7 +142,7 @@ export function createRenderer(canvas, sim) {
     ...Array.from({ length: 7 }, (_, i) => box(0.5, 0.5, 0.35, -3 + i, 5 + (i & 1 ? 0.25 : -0.25), 0, 0x222222))];
   const lastSeg = P.length - 2, fh = Math.atan2(P[lastSeg + 1][0] - P[lastSeg][0], P[lastSeg + 1][1] - P[lastSeg][1]);
   const back = TRACK.length - TRACK.finish;
-  const strip = () => box(6.4, 0.02, 0.6, 0, 0.09, 0, 0xFFFFFF);
+  const strip = () => box(4, 0.02, 0.6, 0, 0.09, 0, 0xFFFFFF);
   const fm = mesh([...arch, strip()]);
   fm.rotation.y = fh;
   fm.position.set(P[lastSeg + 1][0] - Math.sin(fh) * back, 0, P[lastSeg + 1][1] - Math.cos(fh) * back);
@@ -157,9 +158,15 @@ export function createRenderer(canvas, sim) {
   const riders = sim.riders.map((r, i) => {
     const grp = new THREE.Group(), tilt = new THREE.Group(), p = person(i ? BIKE[i] : 0xFFD23F, 0x4A4F63, SKIN[i % 3], i ? 0x3A2A1A : 0xFFFFFF, i > 0);
     p.g.position.set(0, 0.3, -0.25); p.g.scale.setScalar(0.85);
+    if (!i) { // player stays bright: unlit shirt, helmet, red basket
+      const lit = new THREE.MeshBasicMaterial({ vertexColors: true });
+      p.g.children[0].material = p.arms[0].material = p.arms[1].material = lit;
+      const bk = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.1), new THREE.MeshBasicMaterial({ color: 0xFF3D2E }));
+      bk.position.set(0, 1.15, -0.85); tilt.add(bk);
+    }
     p.arms.forEach(a => { a.rotation.x = -1.2; });
     tilt.add(bike(BIKE[i]), p.g); grp.add(tilt); scene.add(grp);
-    return { grp, tilt, p, ph: 0, fall0: 0 };
+    return { grp, tilt, p, ph: 0 };
   });
   const walkers = sim.walkers.map(w => {
     const k = w.look, p = person(SHIRT[k % 5], PANTS[k % 2], SKIN[(k >> 3) % 3], [0x3A2A1A, 0x1E1A16, 0x8A6A3A][(k >> 5) % 3]);
@@ -170,7 +177,7 @@ export function createRenderer(canvas, sim) {
 
   // shadow blobs: one instanced mesh
   const N = riders.length + walkers.length;
-  const blobs = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.25, depthWrite: false }), N);
+  const blobs = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.25, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), N);
   blobs.frustumCulled = false; scene.add(blobs);
 
   // particles: puffs on a crash, dust on grass
@@ -185,7 +192,7 @@ export function createRenderer(canvas, sim) {
   }
 
   const cp = new THREE.Vector3(), look = new THREE.Vector3(), mat = new THREE.Matrix4(), q = new THREE.Quaternion(), Y = new THREE.Vector3(0, 1, 0), sc1 = new THREE.Vector3();
-  let camH = 0, pull = 0, shake = 0, t = 0, ready = false, prevFall = 0;
+  let camH = 0, pull = 0, shake = 0, t = 0, ready = false;
 
   function resize() {
     const w = innerWidth, h = innerHeight;
@@ -201,7 +208,7 @@ export function createRenderer(canvas, sim) {
     riders.forEach((v, i) => {
       const r = sim.riders[i];
       v.grp.position.set(r.x, 0, r.z); v.grp.rotation.y = r.heading;
-      const el = 2 - r.fall, k = r.fall > 0 ? Math.min(1, el / 0.25) * Math.min(1, r.fall / 0.3) : 0;
+      const el = FALL - r.fall, k = r.fall > 0 ? Math.min(1, el / 0.25) * Math.min(1, r.fall / 0.3) : 0;
       v.tilt.rotation.z = k * 1.4 - r.steer * 0.15 * (1 - k);
       v.p.g.position.x = k * 0.8; v.p.g.rotation.z = k * 0.8;
       v.ph += r.speed * dt * 1.6;
@@ -219,8 +226,8 @@ export function createRenderer(canvas, sim) {
       v.bang.visible = !moving;
       v.grp.visible = Math.hypot(w.x - me.x, w.z - me.z) < 85;
     });
-    sim.riders.forEach((r, i) => blobs.setMatrixAt(i, mat.compose(cp.set(r.x, 0.12, r.z), q.setFromAxisAngle(Y, r.heading), sc1.set(1.1, 1, 1.9))));
-    sim.walkers.forEach((w, i) => blobs.setMatrixAt(4 + i, mat.compose(cp.set(w.x, 0.12, w.z), q.identity(), sc1.set(0.9, 1, 0.9))));
+    sim.riders.forEach((r, i) => blobs.setMatrixAt(i, mat.compose(cp.set(r.x, 0.14, r.z), q.setFromAxisAngle(Y, r.heading), sc1.set(1.1, 1, 1.9))));
+    sim.walkers.forEach((w, i) => blobs.setMatrixAt(riders.length + i, mat.compose(cp.set(w.x, 0.14, w.z), q.identity(), sc1.set(0.9, 1, 0.9))));
     blobs.instanceMatrix.needsUpdate = true;
 
     // particles; dust while the player is on grass
@@ -235,8 +242,8 @@ export function createRenderer(canvas, sim) {
 
     // camera
     if (menu) {
-      cam.fov = 62;
-      cam.position.set(Math.sin(t * 0.25) * 12, 5, 4 + Math.cos(t * 0.25) * 12); cam.lookAt(0, 1, 3);
+      cam.fov = 62; // start line with riders, houses behind
+      cam.position.set(-4 + Math.sin(t * 0.2) * 2, 2.4, -8); cam.lookAt(3, 2, 20);
     } else {
       const falling = me.fall > 0;
       pull = lerp(pull, falling ? 1 : 0, dt * 6);
@@ -256,5 +263,5 @@ export function createRenderer(canvas, sim) {
     sky.position.copy(cam.position);
     renderer.render(scene, cam);
   }
-  return { draw, resize, restart: () => { ready = false; } };
+  return { draw, restart: () => { ready = false; } };
 }

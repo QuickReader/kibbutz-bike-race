@@ -71,3 +71,6 @@ Grass slowdown: light dust cubes `#C9B98A` behind the bike while off path; sligh
 
 ## Don'ts
 No purple-blue gradients, no glass/blur, no pure `#000` text, no emoji as icons (use CSS/SVG shapes), no centred-everything layout on Start.
+
+## Exception: player visibility
+The player's shirt, helmet and rear basket (`#FF3D2E`, 0.5x0.3x0.1) use `MeshBasicMaterial` (unlit) so the player stays readable in shade. Everything else stays Lambert. Approved by Leader.
