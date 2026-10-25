@@ -24,20 +24,27 @@ addEventListener('keydown', e => {
   else if (e.key === 'ArrowRight') keys.right = true;
   else if (e.key === 'Enter' && state === 'menu') begin();
 });
+const release = () => { keys.left = keys.right = false; touchDir = 0; };
+addEventListener('blur', release);
+addEventListener('visibilitychange', release);
 addEventListener('keyup', e => { if (e.key === 'ArrowLeft') keys.left = false; if (e.key === 'ArrowRight') keys.right = false; });
 
 function retrigger(el, cls, ms) {
   el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
   if (ms) setTimeout(() => el.classList.remove(cls), ms);
 }
-const fmt = t => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
+const fmt = t => {
+  if (t === null) return 'DNF';
+  t = Math.round(t * 10) / 10;
+  return `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
+};
 
 function begin() {
   if (state !== 'menu' && state !== 'results') return;
   try { document.documentElement.requestFullscreen?.().then(() => screen.orientation.lock?.('landscape')).catch(() => {}); } catch {}
   sim.reset(); me = sim.riders[0]; view.restart();
   $('menu').hidden = $('results').hidden = true; $('hud').hidden = false;
-  state = 'countdown'; count = 3.99; shownPlace = 0; lastFall = 0;
+  state = 'countdown'; count = 3; shownPlace = 0; lastFall = 0;
 }
 $('menu').addEventListener('click', begin);
 $('again').addEventListener('click', begin);
