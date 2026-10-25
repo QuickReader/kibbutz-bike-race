@@ -15,3 +15,4 @@
 - 2026-10-25 — Git identity QuickReader + GitHub no-reply email; rewrote 5 unpushed commits to hide Gmail. — user
 - 2026-10-25 — Licence: all rights reserved (QuickReader). Privacy line in README only. — user
 - 2026-10-25 — No CSP in v1 (no external requests; breakage risk > gain). — Leader (on security rec)
+- 2026-10-25 — Published: public repo QuickReader/kibbutz-bike-race, GitHub Pages from main → https://quickreader.github.io/kibbutz-bike-race/ — user
