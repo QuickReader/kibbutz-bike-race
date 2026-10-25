@@ -44,10 +44,10 @@ export const outline = new THREE.ShaderMaterial({
 // unit primitives, cached; non-indexed so box faces stay flat
 const cache = new Map();
 const prim = (key, make) => { let g = cache.get(key); if (!g) cache.set(key, g = make().toNonIndexed()); return g; };
-const seg = r => (r >= 0.15 ? [20, 14] : r >= 0.07 ? [14, 10] : [10, 7]);
+const seg = r => (r >= 0.15 ? [16, 10] : r >= 0.07 ? [12, 8] : [8, 5]);
 export const G = {
   sphere: (r, w, h) => { [w, h] = w ? [w, h] : seg(r); return prim(`s${r},${w},${h}`, () => new THREE.SphereGeometry(r, w, h)); },
-  caps: (r, len) => prim(`p${r},${len}`, () => new THREE.CapsuleGeometry(r, len, 5, 12)),
+  caps: (r, len) => prim(`p${r},${len}`, () => new THREE.CapsuleGeometry(r, len, 3, 8)),
   box: (w, h, d) => prim(`b${w},${h},${d}`, () => new THREE.BoxGeometry(w, h, d)),
   cyl: (r, h, s = 14) => prim(`c${r},${h},${s}`, () => new THREE.CylinderGeometry(r, r, h, s)),
   cone: (r, h, s = 18) => prim(`n${r},${h},${s}`, () => new THREE.ConeGeometry(r, h, s)),
@@ -57,7 +57,7 @@ export const G = {
 
 // average normals of coincident vertices so box corners / seams do not split the hull open
 function smooth(geo) {
-  const p = geo.attributes.position, n = geo.attributes.normal, sum = new Map(), key = i => `${p.getX(i).toFixed(4)},${p.getY(i).toFixed(4)},${p.getZ(i).toFixed(4)}`;
+  const p = geo.attributes.position, n = geo.attributes.normal, sum = new Map(), key = i => `${Math.round(p.getX(i) * 1e4) + 0},${Math.round(p.getY(i) * 1e4) + 0},${Math.round(p.getZ(i) * 1e4) + 0}`;
   for (let i = 0; i < p.count; i++) {
     const k = key(i), s = sum.get(k) || [0, 0, 0];
     s[0] += n.getX(i); s[1] += n.getY(i); s[2] += n.getZ(i); sum.set(k, s);

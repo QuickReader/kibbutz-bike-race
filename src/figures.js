@@ -7,9 +7,9 @@ const Y = new THREE.Vector3(0, 1, 0), V = (x, y, z) => new THREE.Vector3(x, y, z
 const HIP = 0.86, L1 = 0.4, L2 = 0.4;
 
 // thin cylinder between two points (unit-height primitive, stretched)
-function tube(rig, bone, a, b, r, color, thin = true) {
+function tube(rig, bone, a, b, r, color) {
   const d = new THREE.Vector3().subVectors(b, a), len = d.length();
-  rig.solid(bone, G.cyl(r, 1, 8), color, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2, sy: len, q: new THREE.Quaternion().setFromUnitVectors(Y, d.divideScalar(len)), thin });
+  rig.solid(bone, G.cyl(r, 1, 8), color, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2, sy: len, q: new THREE.Quaternion().setFromUnitVectors(Y, d.divideScalar(len)), thin: true });
 }
 
 /* ---------- people ---------- */
@@ -21,7 +21,7 @@ export function person(rig, parent, { skin, shirt, pants, shoe = 0xFFFFFF, hair 
   S(upper, G.caps(0.17, 0.2), shirt, { y: 0.27, sz: 0.74 });
   if (stripe) S(upper, G.cyl(0.176, 0.07, 18), stripe, { y: 0.3, sz: 0.76, outline: false });
   S(upper, G.cyl(0.06, 0.12, 10), skin, { y: 0.58, thin: true });
-  S(head, G.sphere(0.2, 20, 14), skin, { sy: 1.04 });
+  S(head, G.sphere(0.2, 16, 10), skin, { sy: 1.04 });
   for (const s of [-1, 1]) {
     S(head, G.sphere(0.045), skin, { x: s * 0.2, y: -0.01, thin: true });
     S(head, G.sphere(0.052), 0xFFFFFF, { x: s * 0.075, y: 0.035, z: 0.17, sz: 0.5, thin: true });
@@ -33,11 +33,11 @@ export function person(rig, parent, { skin, shirt, pants, shoe = 0xFFFFFF, hair 
   S(head, G.sphere(0.034), skin, { y: -0.015, z: 0.2, thin: true });
   S(head, MOUTH, 0x6B2A2A, { y: -0.055, z: 0.19, rx: -0.15, rz: Math.PI, outline: false });
   if (helmet) {
-    S(head, G.cap(0.225, 2.0, 22, 14), helmet, { y: 0.005, rx: -0.2 });
+    S(head, G.cap(0.225, 2.0, 16, 10), helmet, { y: 0.005, rx: -0.2 });
     for (const a of [Math.PI / 2, 3 * Math.PI / 2]) S(head, new THREE.SphereGeometry(0.23, 12, 10, a - 0.25, 0.5, 0, 2.0).toNonIndexed(), 0xFF3D2E, { y: 0.005, rx: -0.2, outline: false });
     S(head, G.sphere(0.2, 14, 8), hair, { y: -0.08, z: -0.03, sy: 0.4, sx: 0.9, thin: true });
   } else {
-    S(head, G.cap(0.212, style === 'bald' ? 0.5 : 1.85, 20, 12), hair, { y: 0.01, rx: -0.35 });
+    S(head, G.cap(0.212, style === 'bald' ? 0.5 : 1.85, 16, 10), hair, { y: 0.01, rx: -0.35 });
     S(head, G.sphere(0.07), hair, { x: 0.19, y: 0.04, z: -0.02, sy: 1.3, thin: true });
     S(head, G.sphere(0.07), hair, { x: -0.19, y: 0.04, z: -0.02, sy: 1.3, thin: true });
     if (style === 'pony') { S(head, G.caps(0.065, 0.2), hair, { y: -0.08, z: -0.26 }); S(head, G.sphere(0.05), 0xE8537A, { y: 0.06, z: -0.22, thin: true }); }
@@ -83,8 +83,8 @@ export function bike(rig, parent, color, basket) {
   const S = (b, g, c, o) => rig.solid(b, g, c, o), T = (a, b, r, c, bone = parent) => tube(rig, bone, a, b, r, c);
   const wheels = [-0.58, 0.58].map(z => {
     const w = rig.bone(parent, 0, W, z);
-    S(w, G.torus(W - 0.03, 0.045, 8, 28), 0x2C2833, { ry: Math.PI / 2 });
-    S(w, G.torus(W - 0.07, 0.014, 5, 28), 0xDAD6CC, { ry: Math.PI / 2, outline: false });
+    S(w, G.torus(W - 0.03, 0.045, 6, 20), 0x2C2833, { ry: Math.PI / 2 });
+    S(w, G.torus(W - 0.07, 0.014, 4, 20), 0xDAD6CC, { ry: Math.PI / 2, outline: false });
     S(w, G.sphere(0.05, 10, 8), 0xDAD6CC, { thin: true });
     for (let i = 0; i < 3; i++) S(w, G.cyl(0.008, 1, 4), 0xDAD6CC, { sy: (W - 0.07) * 2, rx: i * Math.PI / 3, outline: false });
     return w;
@@ -186,8 +186,7 @@ export function hall() { // 16 x 4.5 x 9 dining hall, front (porch) toward +z
   b.add(G.box(16, 4.5, 9), 0xF6E3B8, { y: 2.25 }).add(G.box(17, 0.6, 10), 0xD2573A, { y: 4.8 }).add(G.box(14, 0.5, 8), 0xC24A32, { y: 5.3 })
     .add(G.box(16, 0.3, 3), 0xD2573A, { y: 3.6, z: 5.8 });
   for (const x of [-6, -2, 2, 6]) b.add(G.box(0.5, 3.4, 0.5), 0xFFFFFF, { x, y: 1.7, z: 6.9 });
-  b.add(G.box(8, 1.4, 0.3), 0x2E6F8E, { y: 6.35, z: 4.2 }).add(G.box(5.6, 0.5, 0.1), 0xFFF6E0, { x: 0.6, y: 6.35, z: 4.4, outline: false });
-  b.add(G.cyl(0.4, 0.06, 18), 0xFFF6E0, { x: -2.8, y: 6.35, z: 4.4, rx: Math.PI / 2, outline: false }).add(G.caps(0.07, 0.4), 0xFFF6E0, { x: -2.1, y: 6.35, z: 4.4, outline: false });
+  b.add(G.box(8, 1.4, 0.3), 0x2E6F8E, { y: 6.35, z: 4.2 });
   return b.add(G.box(1.6, 2.6, 0.2), 0x2E8FA3, { y: 1.3, z: 4.55 });
 }
 export function arch() { // finish arch, centred on the path, spans x
