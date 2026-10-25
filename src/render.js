@@ -38,13 +38,13 @@ function flat() {
 const clamp01 = v => Math.max(0, Math.min(1, v));
 // instanced fill + hull sharing one matrix buffer, split into 128 m cells so far cells are frustum-culled; per-instance +-4% brightness
 function scatter(batch, items, scale = () => 1) {
-  const [fg, hg] = batch.geometries(), cells = new Map(), m = new THREE.Matrix4(), out = [];
+  const tint = new THREE.Color(), [fg, hg] = batch.geometries(), cells = new Map(), m = new THREE.Matrix4(), out = [];
   items.forEach((it, i) => { const k = Math.floor(it.x / 128) + ',' + Math.floor(it.z / 128); if (!cells.has(k)) cells.set(k, []); cells.get(k).push([it, i]); });
   for (const list of cells.values()) {
     const f = new THREE.InstancedMesh(fg, toon, list.length), h = new THREE.InstancedMesh(hg, outline, list.length);
     list.forEach(([it, i], j) => {
       f.setMatrixAt(j, m.copy(at(it.x, 0, it.z, it.rot || 0, scale(i))));
-      f.setColorAt(j, hex(0xffffff).multiplyScalar(1 + (((i * 7919) % 100) / 50 - 1) * 0.04));
+      const b = 1 + (((i * 7919) % 100) / 50 - 1) * 0.04; f.setColorAt(j, tint.setRGB(b, b, b));
     });
     h.instanceMatrix = f.instanceMatrix; f.computeBoundingSphere(); h.computeBoundingSphere(); out.push(f, h);
   }
@@ -120,6 +120,14 @@ export function createRenderer(canvas, sim) {
   hb.items.forEach(it => { it.at = hm; }); ab.items.forEach(it => { it.at = am; });
   const place = new Batch(); place.items = [...hb.items, ...ab.items];
   scene.add(...place.meshes());
+  // FINISH lettering on the sign board (small canvas texture, one extra draw)
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 96;
+  const cx = cv.getContext('2d'); cx.font = '900 80px "Arial Rounded MT Bold", ui-rounded, "Trebuchet MS", system-ui, sans-serif';
+  cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.lineJoin = 'round'; cx.lineWidth = 12; cx.strokeStyle = '#2A2233'; cx.fillStyle = '#FFD23F';
+  cx.strokeText('FINISH', 256, 52); cx.fillText('FINISH', 256, 52);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(7.4, 7.4 * 96 / 512), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+  sign.position.set(0, 6.35, 4.36); sign.applyMatrix4(hm); scene.add(sign);
 
   // characters: bones from figures.js, one SkinnedMesh pair each
   const SKIN = [0xF1C9A0, 0xC68E5E, 0x8D5A3B], SHIRT = [0xD96C8E, 0x5AA0D8, 0x9AA0A6, 0x7BBF6A, 0xE8A33D], PANTS = [0x4A4F63, 0x6B5B45];
@@ -140,8 +148,8 @@ export function createRenderer(canvas, sim) {
     const k = w.look, rig = new Rig(), root = rig.bone(null);
     const p = person(rig, root, { skin: SKIN[(k >> 3) % 3], shirt: SHIRT[k % 5], pants: PANTS[k % 2], hair: HAIR[(k >> 5) % 4], style: STYLES[(k >> 7) % 7],
       shorts: k % 7 === 0, shoe: k & 1 ? 0xFFFFFF : 0x3A3340, bang: true });
-    const grp = new THREE.Group(); grp.rotation.order = 'YXZ'; grp.add(...rig.skinned(), root); scene.add(grp);
-    return { grp, p, ph: k % 6 };
+    const [fill, hull] = rig.skinned(), grp = new THREE.Group(); grp.rotation.order = 'YXZ'; grp.add(fill, hull, root); scene.add(grp);
+    return { grp, p, hull, ph: k % 6 };
   });
 
   // shadow blobs: one instanced mesh of flat dark ellipses
@@ -162,8 +170,8 @@ export function createRenderer(canvas, sim) {
   }
 
   // menu line-up: cast stands in front of the start line facing the camera (display only, sim untouched)
-  const STAGE_R = [{ x: 1.5, z: 1.2, h: -0.25 }, { x: 0.2, z: 0.4, h: 0.3 }, { x: 2.8, z: 0.5, h: -0.4 }, { x: 4.1, z: 0.2, h: -0.3 }];
-  const STAGE_W = [{ x: 0.9, z: -1.6, h: 0.1 }, { x: 3.4, z: -1.5, h: -0.2 }, { x: 5.0, z: -0.2, h: -0.35 }];
+  const STAGE_R = [{ x: 1.6, z: 1.2, h: -0.25 }, { x: 0.4, z: 0.4, h: 0.3 }, { x: 2.8, z: 0.5, h: -0.4 }, { x: 3.9, z: 0.2, h: -0.3 }];
+  const STAGE_W = [{ x: 1.0, z: -1.6, h: 0.1 }, { x: 3.3, z: -1.5, h: -0.2 }];
 
   const cp = new THREE.Vector3(), look = new THREE.Vector3(), mat = new THREE.Matrix4(), q = new THREE.Quaternion(), Y = new THREE.Vector3(0, 1, 0), sc1 = new THREE.Vector3();
   let camH = 0, pull = 0, shake = 0, t = 0, ready = false;
@@ -187,6 +195,7 @@ export function createRenderer(canvas, sim) {
     t += dt; adapt(); flowers.visible = !menu;
     const me = sim.riders[0];
     let n = 0;
+    const near = (x, z) => !menu && Math.hypot(x - cam.position.x, z - cam.position.z) < 2.5; // keep passers-by out of the lens
     const blob = (x, z, h, w, l) => blobs.setMatrixAt(n++, mat.compose(cp.set(x, 0.08, z), q.setFromAxisAngle(Y, h), sc1.set(w, 1, l)));
     riders.forEach((v, i) => {
       const r = sim.riders[i], s = menu ? STAGE_R[i] : r;
@@ -198,7 +207,7 @@ export function createRenderer(canvas, sim) {
       v.ph += (menu ? 2.2 : r.speed * 1.0) * dt; v.wa += (menu ? 0 : r.speed / 0.34) * dt;
       v.bk.wheels.forEach(w => { w.rotation.x = v.wa; });
       ride(v.p, v.bk, v.ph, v.lean);
-      v.grp.visible = menu || Math.hypot(r.x - me.x, r.z - me.z) < 90;
+      v.grp.visible = menu || (Math.hypot(r.x - me.x, r.z - me.z) < 90 && (i === 0 || !near(r.x, r.z)));
       if (v.grp.visible) blob(x, z, h, 0.5, 1.0); else blob(0, 0, 0, 0, 0);
       if (menu) return;
       if (r.fall > 0 && !v.hit) { v.hit = true; if (i === 0) shake = 0.25; for (let c = 0; c < 6; c++) spawn(r.x, 0.5, r.z, 0xFFFFFF, (Math.random() - 0.5) * 4, 2 + Math.random() * 2, (Math.random() - 0.5) * 4, 0.35); }
@@ -212,7 +221,8 @@ export function createRenderer(canvas, sim) {
       if (moving && !s) v.ph += dt * w.speed * 4.2;
       walk(v.p, v.ph, moving && !s);
       v.p.mark.position.y = moving ? -60 : 2.3;
-      v.grp.visible = s ? true : !menu && Math.hypot(w.x - me.x, w.z - me.z) < 85;
+      const dm = Math.hypot(w.x - me.x, w.z - me.z);
+      v.grp.visible = s ? true : !menu && dm < 85 && !near(w.x, w.z); v.hull.visible = !!s || dm < 40;
       if (v.grp.visible) blob(x, z, h, 0.55, 0.55); else blob(0, 0, 0, 0, 0);
     });
     blobs.instanceMatrix.needsUpdate = true;
@@ -223,8 +233,8 @@ export function createRenderer(canvas, sim) {
     }
 
     if (menu) { // low front shot of the line-up; sways a little
-      cam.fov = 40; cam.position.set(0.7 + Math.sin(t * 0.3) * 0.4, 1.3, 7.6);
-      cam.lookAt(0.7, 1.05, 0);
+      cam.fov = 40; cam.position.set(0.25 + Math.sin(t * 0.3) * 0.4, 1.3, 7.6);
+      cam.lookAt(0.25, 1.05, 0);
     } else {
       if (!reduced && !me.onRoad && me.speed > 2 && (dustT -= dt) < 0) {
         dustT = 0.08;
@@ -232,7 +242,7 @@ export function createRenderer(canvas, sim) {
       }
       pull = lerp(pull, me.fall > 0 ? 1 : 0, dt * 6);
       camH = ready ? angLerp(camH, me.heading, dt * 3) : me.heading;
-      const dist = 4.5 + pull * 1.5, up = 2.6 + pull * 0.8, fx = Math.sin(camH), fz = Math.cos(camH);
+      const dist = 4.5 + pull * 1.5, up = 2.8 + pull * 0.8, fx = Math.sin(camH), fz = Math.cos(camH);
       cp.set(me.x - fx * dist, up, me.z - fz * dist);
       if (ready) cam.position.lerp(cp, Math.min(1, dt * 6)); else cam.position.copy(cp);
       shake = Math.max(0, shake - dt);
@@ -247,5 +257,5 @@ export function createRenderer(canvas, sim) {
     sky.position.copy(cam.position);
     renderer.render(scene, cam);
   }
-  return { draw, restart: () => { ready = false; }, info: renderer.info };
+  return { draw, restart: () => { ready = false; } };
 }
